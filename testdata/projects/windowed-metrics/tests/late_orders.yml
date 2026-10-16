@@ -1,0 +1,19 @@
+# A fixture moves the clock with `- watermark:` items and must acknowledge
+# every event that is dropped. Two ways to be late: behind the watermark, or
+# at the watermark but in a window that has already closed (a window closes
+# when the watermark reaches its last millisecond, 10:04:59.999 here).
+model: spend_per_5m
+
+given:
+  - event: { customer_id: 42, amount: 60, ordered_at: "2026-08-30T10:01:00Z" }
+  - watermark: "2026-08-30T10:04:59.999Z"
+  - event: { customer_id: 42, amount: 5,  ordered_at: "2026-08-30T10:04:59.999Z" }
+  - event: { customer_id: 42, amount: 5,  ordered_at: "2026-08-30T10:03:00Z" }
+  - event: { customer_id: 42, amount: 30, ordered_at: "2026-08-30T10:06:00Z" }
+
+expect:
+  - { op: insert, customer_id: 42, window_start: "2026-08-30T10:00:00Z", window_end: "2026-08-30T10:05:00Z", total_spend: 60, orders: 1 }
+
+late:
+  - { customer_id: 42, amount: 5, ordered_at: "2026-08-30T10:04:59.999Z" }
+  - { customer_id: 42, amount: 5, ordered_at: "2026-08-30T10:03:00Z" }

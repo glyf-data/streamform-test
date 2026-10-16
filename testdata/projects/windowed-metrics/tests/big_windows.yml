@@ -1,0 +1,15 @@
+# big_windows reads spend_per_5m through ref(): its input is the windowed
+# model's final rows, so it sees a window only once the window has closed.
+model: big_windows
+
+given:
+  - { customer_id: 42, amount: 60,  ordered_at: "2026-08-30T10:01:00Z" }
+  - { customer_id: 7,  amount: 15,  ordered_at: "2026-08-30T10:02:00Z" }
+  - { customer_id: 42, amount: 50,  ordered_at: "2026-08-30T10:04:59Z" }
+  - { customer_id: 42, amount: 30,  ordered_at: "2026-08-30T10:06:00Z" }
+  - { customer_id: 7,  amount: 120, ordered_at: "2026-08-30T10:09:59.999Z" }
+  - { customer_id: 42, amount: 10,  ordered_at: "2026-08-30T10:11:00Z" }
+
+expect:
+  - { op: insert, customer_id: 42, window_start: "2026-08-30T10:00:00Z", total_spend: 110 }
+  - { op: insert, customer_id: 7,  window_start: "2026-08-30T10:05:00Z", total_spend: 120 }

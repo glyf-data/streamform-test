@@ -1,0 +1,28 @@
+name: windowed-metrics
+version: 1
+
+models:
+  spend_per_5m:
+    materialized: append
+    window:
+      type: tumbling
+      size: 5m
+    sink:
+      connector: kafka
+      topic: spend-per-5m
+      format: json
+  big_windows:
+    materialized: append
+    sink:
+      connector: kafka
+      topic: big-windows
+      format: json
+
+targets:
+  local:
+    backend: flink
+    flink:
+      gateway: http://localhost:8083
+      rest: http://localhost:8081
+    kafka:
+      bootstrap_servers: kafka:9092

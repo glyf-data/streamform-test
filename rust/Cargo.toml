@@ -1,0 +1,15 @@
+[package]
+name = "streamform-test"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+description = "Write streaming tests in Rust; run them in the free streamform binary."
+readme = "README.md"
+keywords = ["streaming", "testing", "flink", "kafka", "sql"]
+categories = ["development-tools::testing"]
+
+# The boundary, enforced here: this crate writes fixtures and reads reports.
+# It never depends on the compiler or the simulator.
+[dependencies]
+serde_json = "1"

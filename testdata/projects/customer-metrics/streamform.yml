@@ -1,0 +1,21 @@
+name: customer-metrics
+version: 1
+
+models:
+  customer_metrics:
+    materialized: upsert
+    key:
+      - customer_id
+    sink:
+      connector: kafka
+      topic: customer-metrics
+      format: json
+
+targets:
+  local:
+    backend: flink
+    flink:
+      gateway: http://localhost:8083
+      rest: http://localhost:8081
+    kafka:
+      bootstrap_servers: kafka:9092

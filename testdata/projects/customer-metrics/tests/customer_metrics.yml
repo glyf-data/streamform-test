@@ -1,0 +1,17 @@
+model: customer_metrics
+
+given:
+  - customer_id: 42
+    amount: 10
+
+  - customer_id: 42
+    amount: 18
+
+expect:
+  - op: insert
+    customer_id: 42
+    total_spend: 10
+
+  - op: update
+    customer_id: 42
+    total_spend: 28

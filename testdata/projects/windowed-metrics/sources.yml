@@ -1,0 +1,18 @@
+sources:
+  orders:
+    connector: kafka
+    topic: orders
+    format: json
+    key: [customer_id]            # producers key each order by customer
+    schema:
+      customer_id: int64
+      amount: decimal(12,2)
+      ordered_at: timestamp
+    event_time: ordered_at
+    watermark: 1m
+    idle_timeout: 30s             # a partition quiet this long stops holding windows open
+    contracts:
+      - name: has_time              # an order without ordered_at would stop the windows on Flink
+        not_null: [ordered_at]
+    quarantine:
+      topic: orders-quarantine

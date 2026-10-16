@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "streamform-test"
+version = "0.1.0"
+description = "Write streaming tests in Python; run them in the free streamform binary."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.13"
+dependencies = []
+classifiers = [
+  "Framework :: Pytest",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Software Development :: Testing",
+]
+
+[project.optional-dependencies]
+pytest = ["pytest>=7"]
+
+[project.entry-points.pytest11]
+streamform = "streamform_test.pytest_plugin"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/streamform_test"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
