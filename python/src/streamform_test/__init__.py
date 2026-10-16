@@ -11,8 +11,9 @@ from . import binary
 from .binary import StreamformError
 from .fixture import Fixture
 from .run import Change, Run
+from .sql import StreamSQL
 
-__all__ = ["Change", "Fixture", "Project", "Run", "StreamformError"]
+__all__ = ["Change", "Fixture", "Project", "Run", "StreamSQL", "StreamformError"]
 __version__ = "0.1.0"
 
 

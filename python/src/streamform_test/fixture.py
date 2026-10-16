@@ -45,6 +45,7 @@ class Fixture:
         self.expected: list[dict[str, Any]] | None = None
         self.late: list[dict[str, Any]] | None = None
         self.quarantined: list[dict[str, Any]] | None = None
+        self._owner: object | None = None
 
     def event(self, row: Row | None = None, /, **columns: Any) -> Fixture:
         """Deliver one event to the model's source: a row, or its columns as keywords."""

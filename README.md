@@ -17,6 +17,31 @@ def test_a_late_order_is_dropped():
          "window_end": "2026-08-30T10:05:00Z", "total_spend": 60, "orders": 1})
 ```
 
+## Bring your own SQL
+
+No Streamform project needed: give the query and the columns of what it reads, and test it the same way. The library writes a throwaway project into a temporary directory, runs it in the binary, and removes it afterwards.
+
+```python
+from streamform_test import StreamSQL
+
+totals = StreamSQL(
+    "SELECT customer_id, SUM(amount) AS total FROM source('orders') GROUP BY customer_id",
+    sources={"orders": {"customer_id": "int64", "amount": "decimal(12,2)"}},
+    key="customer_id",
+)
+
+def test_a_refund_lowers_the_total():
+    run = totals.event(customer_id=42, amount=100).event(customer_id=42, amount=-10).run()
+    run.assert_final_state("customer_id", {"customer_id": 42, "total": 90})
+```
+
+- `sources` maps each source to its column types (`int32`, `int64`, `float64`, `decimal`, `decimal(p,s)`, `string`, `boolean`, `timestamp`), or to a full source as `sources.yml` holds it: `schema`, `event_time`, `watermark`, `late_events`, `contracts`, `quarantine`.
+- `key` makes the result keyed, as an aggregate needs (`materialized: upsert`); without it the result is append, as a filter or a projection is.
+- `window="5m"` cuts an aggregate into tumbling windows of event time; the query then selects and groups by `window_start` and `window_end`.
+- The query is a Streamform model: `source('orders')` reads a source, and SQL Streamform does not support is refused with the binary's own message.
+
+In Rust: `StreamSql::new(sql).source("orders", json!({...})).key(&["customer_id"]).fixture()?`, then the same fixture methods.
+
 ## How it works
 
 The library is a client of the binary. It builds a fixture (the same document as a project's `tests/*.yml`), runs `streamform test --fixture - --json --project DIR` with the fixture on stdin, and reads the test report. It never contains the compiler or the simulator, and never runs SQL itself: the Python package has no dependencies, and the Rust crate depends on `serde_json` only.

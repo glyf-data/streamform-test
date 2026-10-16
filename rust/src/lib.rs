@@ -27,8 +27,10 @@ use std::process::{Command, Stdio};
 
 use serde_json::{Map, Value, json};
 
+mod sql;
 mod values;
 
+pub use sql::StreamSql;
 pub use values::{same, same_row};
 
 /// The environment variable that names the binary.
@@ -161,6 +163,7 @@ impl Project {
             expect: None,
             late: None,
             quarantined: None,
+            owner: None,
         }
     }
 
@@ -229,9 +232,16 @@ pub struct Fixture {
     expect: Option<Vec<Value>>,
     late: Option<Vec<Value>>,
     quarantined: Option<Vec<Value>>,
+    /// Keeps a `StreamSql` project on disk for as long as a fixture uses it.
+    owner: Option<std::sync::Arc<sql::TempProject>>,
 }
 
 impl Fixture {
+    /// The project directory the fixture runs against.
+    pub fn project_path(&self) -> &Path {
+        &self.project
+    }
+
     /// Deliver one event (a JSON object of column values) to the model's source.
     pub fn event(mut self, row: Value) -> Self {
         self.given.push(json!({ "event": row }));
