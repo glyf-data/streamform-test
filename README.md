@@ -240,7 +240,7 @@ cd examples && ../python/.venv/bin/python -m pytest && (cd rust && cargo test)
 `streamform-bin` is built from a Streamform release's assets, never from source: `bin/build_wheels.py` checks each archive against the release's `checksums.txt` and writes one wheel per platform with the binary and the terms of use.
 
 ```bash
-gh release download v0.9.0 -R glyf-data/streamform -p 'streamform-*-*.tar.gz' -p checksums.txt -p LICENSE -D assets/
+gh release download v0.9.0 -R glyf-data/streamform-releases -p 'streamform-*-*.tar.gz' -p checksums.txt -p LICENSE -D assets/
 python bin/build_wheels.py --assets assets/ --version 0.9.0 --out dist/
 (cd python && uv build --out-dir ../dist)
 uvx twine check dist/*
