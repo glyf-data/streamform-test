@@ -1,0 +1,29 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:ital,wght@0,400..900;1,400..900&family=Fragment+Mono:ital@0;1&display=swap">
+<script>
+  // One light or dark choice for the landing page and these docs. The landing
+  // page keeps it as `streamform-theme`; mdBook keeps its own as `mdbook-theme`,
+  // which its script reads after this one, so the shared choice is copied in
+  // first and copied back whenever the theme menu changes it.
+  (() => {
+    const mdbook = { light: "light", dark: "ayu" };
+    try {
+      const shared = localStorage.getItem("streamform-theme");
+      if (shared in mdbook) localStorage.setItem("mdbook-theme", mdbook[shared]);
+      else if (shared === null) localStorage.removeItem("mdbook-theme");
+    } catch (e) {}
+    addEventListener("DOMContentLoaded", () => {
+      // Two themes, as on the landing page: Auto, Light, and Dark.
+      for (const id of ["rust", "coal", "navy"]) document.getElementById("mdbook-theme-" + id)?.parentElement?.remove();
+      const dark = document.getElementById("mdbook-theme-ayu");
+      if (dark) dark.textContent = "Dark";
+      document.getElementById("mdbook-theme-list")?.addEventListener("click", () => setTimeout(() => {
+        try {
+          const chosen = localStorage.getItem("mdbook-theme");
+          if (chosen === null) localStorage.removeItem("streamform-theme");
+          else localStorage.setItem("streamform-theme", chosen === "light" ? "light" : "dark");
+        } catch (e) {}
+      }));
+    });
+  })();
+</script>

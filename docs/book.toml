@@ -1,0 +1,24 @@
+[book]
+title = "streamform-test"
+authors = ["Kannan Kalidasan"]
+description = "Unit tests for streaming SQL and streaming data quality, in pytest and cargo test."
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+default-theme = "ayu"
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/glyf-data/streamform-test"
+edit-url-template = "https://github.com/glyf-data/streamform-test/edit/main/docs/{path}"
+additional-css = ["theme/custom.css"]
+no-section-label = true
+
+[output.html.fold]
+enable = false
+
+[output.html.search]
+limit-results = 20

@@ -7,3 +7,4 @@ rust/target/
 rust/Cargo.lock
 examples/rust/target/
 examples/rust/Cargo.lock
+docs/book/
