@@ -16,6 +16,8 @@ git-repository-url = "https://github.com/glyf-data/streamform-test"
 edit-url-template = "https://github.com/glyf-data/streamform-test/edit/main/docs/{path}"
 additional-css = ["theme/custom.css"]
 no-section-label = true
+# Served inside the Streamform site, under /test/.
+site-url = "/test/"
 
 [output.html.fold]
 enable = false

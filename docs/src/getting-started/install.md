@@ -1,5 +1,14 @@
 # Install
 
+**Not released yet.** `streamform-test` is not on PyPI or crates.io yet, and it needs `streamform` 0.9, which is not released yet either. Until both are out, install it from the repository without its engine package, and point it at a `streamform` built with `test --fixture`:
+
+```bash
+pip install --no-deps "git+https://github.com/glyf-data/streamform-test#subdirectory=python"
+export STREAMFORM_BIN=/path/to/streamform
+```
+
+The rest of this page describes the released packages.
+
 ## Python
 
 Python 3.13 or newer.
