@@ -19,7 +19,7 @@
 
 ## The engine package
 
-`pip install streamform-test` installs `streamform-bin`, which carries the `streamform` binary for macOS (Apple silicon, Intel) and x86_64 Linux (a static build that runs on any distribution, Alpine included). The binary is free to use under its terms of use, included in that package. The Python package and the Rust crate are open source under Apache-2.0 and contain no engine code.
+`pip install streamform-test` installs `streamform`, which carries the `streamform` binary for macOS (Apple silicon, Intel) and x86_64 Linux (a static build that runs on any distribution, Alpine included). The binary is free to use under its terms of use, included in that package. The Python package and the Rust crate are open source under Apache-2.0 and contain no engine code.
 
 ## Using it without Streamform
 

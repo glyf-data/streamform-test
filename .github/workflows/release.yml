@@ -1,8 +1,9 @@
 name: release
 
 # streamform-test: a `v<version>` tag publishes the Python package to PyPI and
-# a GitHub release. The binary it depends on, streamform-bin, is released by
-# release-bin.yml and must be on PyPI first: the smoke test installs it from there.
+# a GitHub release. The binary it depends on, the `streamform` package, is
+# published by Streamform's own release and must be on PyPI first: the smoke
+# test installs it from there.
 on:
   push:
     tags:
@@ -67,7 +68,7 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-  # Installs the wheel the way a user would, so streamform-bin comes from PyPI,
+  # Installs the wheel the way a user would, so streamform comes from PyPI,
   # and runs the SDK's tests against it.
   smoke:
     name: smoke test (${{ matrix.os }})

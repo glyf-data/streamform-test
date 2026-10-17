@@ -81,7 +81,7 @@ fn a_refund_lowers_the_total() {
 
 ## Powered by Streamform
 
-The engine underneath is Streamform, which compiles the same SQL to Apache Flink and runs it in production. You do not need to use Streamform to use `streamform-test`: the engine arrives with `pip install` as the `streamform-bin` package (macOS and x86_64 Linux; elsewhere, install the `streamform` binary and put it on `PATH`). If you later run your queries with Streamform, the tests you wrote keep working against your project's models.
+The engine underneath is Streamform, which compiles the same SQL to Apache Flink and runs it in production. You do not need to use Streamform to use `streamform-test`: the engine arrives with `pip install` as the `streamform` package (macOS and x86_64 Linux; elsewhere, install the `streamform` binary and put it on `PATH`). If you later run your queries with Streamform, the tests you wrote keep working against your project's models.
 
 The library is a thin, open client: it builds a test, runs it in the engine, and reads the result. It contains no engine code.
 
@@ -93,12 +93,11 @@ The library is a thin, open client: it builds a test, runs it in the engine, and
 | [`examples/`](examples/) | A runnable test for every kind of assertion, in Python and Rust |
 | [`python/`](python/) | The Python package, Python 3.13 or newer |
 | [`rust/`](rust/) | The Rust crate |
-| [`bin/`](bin/) | How the `streamform-bin` wheels are built from a Streamform release |
 
 ## Developing
 
 ```bash
-export STREAMFORM_BIN=/path/to/streamform     # 0.9 or newer, or pip install streamform-bin
+export STREAMFORM_BIN=/path/to/streamform     # 0.9 or newer, or pip install streamform
 cd python && uv venv -p 3.13 && uv pip install -e '.[pytest]' && .venv/bin/python -m pytest
 cd rust && cargo test && cargo clippy --all-targets -- -D warnings
 cd examples && ../python/.venv/bin/python -m pytest && (cd rust && cargo test)
@@ -107,17 +106,15 @@ mdbook build docs                              # the documentation, into docs/bo
 
 ## Releasing
 
-`streamform-bin` is built from a Streamform release's assets, never from source: `bin/build_wheels.py` checks each archive against the release's `checksums.txt` and writes one wheel per platform with the binary and its terms of use.
+Set the same version in `python/pyproject.toml`, `python/src/streamform_test/__init__.py` and `rust/Cargo.toml`, then push a `v<version>` tag. The release workflow checks the versions match the tag, builds the package, installs it from scratch (which brings the `streamform` binary from PyPI) and runs the tests, then creates a GitHub release and publishes to PyPI through trusted publishing. Running it by hand with `publish_to_testpypi` is a dry run against TestPyPI.
+
+The `streamform` package itself is published by Streamform's own release, so a new engine needs no release here.
 
 ```bash
-gh release download v0.9.0 -R glyf-data/streamform-releases -p 'streamform-*-*.tar.gz' -p checksums.txt -p LICENSE -D assets/
-python bin/build_wheels.py --assets assets/ --version 0.9.0 --out dist/
-(cd python && uv build --out-dir ../dist)
-uvx twine check dist/*
-uv publish dist/*                       # streamform-bin first, then streamform-test
-(cd rust && cargo publish)
+git tag v0.1.0 && git push origin v0.1.0
+(cd rust && cargo publish)              # the crate is published by hand
 ```
 
 ## Licence
 
-Apache-2.0. The `streamform` binary that `streamform-bin` carries is free to use under its own terms of use, included in that package.
+Apache-2.0. The `streamform` binary, which the `streamform` package carries, is free to use under its own terms of use, included in that package.

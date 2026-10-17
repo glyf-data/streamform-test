@@ -43,4 +43,4 @@ fn each_order_updates_the_total() {
 
 Errors from the engine are `streamform_test::Error`; assertions panic with `#[track_caller]`.
 
-The crate finds the engine through `STREAMFORM_BIN` or `streamform` on `PATH`; `pip install streamform-bin` is the simplest way to get it.
+The crate finds the engine through `STREAMFORM_BIN` or `streamform` on `PATH`; `pip install streamform` is the simplest way to get it.
