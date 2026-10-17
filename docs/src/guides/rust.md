@@ -4,7 +4,7 @@ The crate has the same model as the Python package, with `serde_json::json!` row
 
 ```toml
 [dev-dependencies]
-streamform-test = "0.1"
+streamform-test = { git = "https://github.com/glyf-data/streamform-test", tag = "v0.1.0" }
 serde_json = "1"
 ```
 

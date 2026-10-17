@@ -24,6 +24,10 @@ classifiers = [
   "Topic :: Software Development :: Testing",
 ]
 
+[project.urls]
+Repository = "https://github.com/glyf-data/streamform-test"
+Issues = "https://github.com/glyf-data/streamform-test/issues"
+
 [project.optional-dependencies]
 pytest = ["pytest>=7"]
 
