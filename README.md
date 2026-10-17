@@ -42,6 +42,33 @@ def test_a_refund_lowers_the_total():
 
 In Rust: `StreamSql::new(sql).source("orders", json!({...})).key(&["customer_id"]).fixture()?`, then the same fixture methods.
 
+## Building event streams
+
+`streamform_test.events` builds the events a test feeds, so a test can loop, generate, read a file, or merge streams instead of listing every event:
+
+```python
+from streamform_test import events as ev
+
+orders = ev.timed(ev.repeat(6, {"customer_id": 42, "amount": 10}),
+                  column="ordered_at", start="2026-08-30T10:00:00Z", every="1m")
+noise = ev.random_rows(500, seed=7, customer_id=ev.choice([1, 2, 3]),
+                       amount=ev.decimals(1, 100), ordered_at=ev.times("2026-08-30T10:00:00Z", every="1s", jitter="5s"))
+replay = ev.read_jsonl("samples/orders.jsonl")
+
+stream = ev.with_watermarks(ev.merge(orders, replay, by="ordered_at"), by="ordered_at", lag="1m")
+run = project.fixture("spend_per_5m").feed(stream).run()
+```
+
+| | |
+|---|---|
+| Loops | `repeat(n, row)` or `repeat(n, lambda i: {...})`; `product(customer_id=[1, 2], amount=[5, 10])` for every combination |
+| Event time | `timed(rows, column=, start=, every="1m")` stamps times in steps |
+| Generators | `random_rows(n, seed=, column=generator)` with `choice`, `integers`, `decimals` (exact, with `places`), `sequence` (ids), `times` (stepping, with `jitter` for out-of-order arrival); the same seed gives the same events, so a failure repeats |
+| Files | `read_csv(path)` (cells typed as a fixture would: empty is null, numbers are numbers; `types={"zip": str}` keeps a column as text), `read_jsonl(path)`, `write_jsonl(path, rows)` to keep a generated stream |
+| Merging | `merge(*streams, by="ordered_at")` interleaves streams already in time order; `with_watermarks(rows, by=, lag="1m")` adds a watermark after each event at the newest time seen minus the lag, only when it moves forward |
+
+`Fixture.feed(stream)` takes the result: dicts are events, `Watermark` items move the watermark. In Rust, loops are iterators (`(0..1000).map(|i| json!({...}))`) and `streamform_test::events` has `timed`, `merge`, `with_watermarks`, `read_jsonl` and `read_csv`, with `Fixture::feed` taking `events::Item`s.
+
 ## How it works
 
 The library is a client of the binary. It builds a fixture (the same document as a project's `tests/*.yml`), runs `streamform test --fixture - --json --project DIR` with the fixture on stdin, and reads the test report. It never contains the compiler or the simulator, and never runs SQL itself: the Python package has no dependencies, and the Rust crate depends on `serde_json` only.

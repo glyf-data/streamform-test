@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from collections.abc import Iterable, Mapping
 from typing import Any
 
 from . import binary
@@ -56,6 +56,17 @@ class Fixture:
         """Deliver several events, in order."""
         for row in rows:
             self.event(row)
+        return self
+
+    def feed(self, items: Iterable[Any]) -> Fixture:
+        """Deliver a stream built with `streamform_test.events`: rows are events, `Watermark` items move the watermark."""
+        from .events import Watermark
+
+        for item in items:
+            if isinstance(item, Watermark):
+                self.watermark(item.at)
+            else:
+                self.event(item)
         return self
 
     def watermark(self, at: str | datetime) -> Fixture:

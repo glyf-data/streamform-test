@@ -27,6 +27,7 @@ use std::process::{Command, Stdio};
 
 use serde_json::{Map, Value, json};
 
+pub mod events;
 mod sql;
 mod values;
 
@@ -252,6 +253,17 @@ impl Fixture {
     pub fn events(mut self, rows: impl IntoIterator<Item = Value>) -> Self {
         for row in rows {
             self = self.event(row);
+        }
+        self
+    }
+
+    /// Deliver a stream built with [`events`]: events, and watermarks between them.
+    pub fn feed(mut self, items: impl IntoIterator<Item = events::Item>) -> Self {
+        for item in items {
+            self = match item {
+                events::Item::Event(row) => self.event(row),
+                events::Item::Watermark(at) => self.watermark(&at),
+            };
         }
         self
     }

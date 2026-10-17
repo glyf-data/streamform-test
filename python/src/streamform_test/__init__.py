@@ -7,13 +7,14 @@ and asserts on the report. It never contains the simulator or the compiler.
 from pathlib import Path
 from typing import Any
 
-from . import binary
+from . import binary, events
 from .binary import StreamformError
+from .events import Watermark
 from .fixture import Fixture
 from .run import Change, Run
 from .sql import StreamSQL
 
-__all__ = ["Change", "Fixture", "Project", "Run", "StreamSQL", "StreamformError"]
+__all__ = ["Change", "Fixture", "Project", "Run", "StreamSQL", "StreamformError", "Watermark", "events"]
 __version__ = "0.1.0"
 
 
