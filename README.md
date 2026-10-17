@@ -179,7 +179,7 @@ Two kinds of assertion:
 
 ## Requirements
 
-A `streamform` with `test --fixture` (0.9 or newer). On macOS (Apple silicon and Intel) and Linux x86_64, `pip install streamform-test` brings it along as the `streamform-bin` package, and the `streamform` command with it. Elsewhere, install the binary yourself. The library looks for it in this order: `STREAMFORM_BIN`, then the binary from `streamform-bin`, then `streamform` on `PATH`. An older binary gets a clear error, not a wrong result.
+A `streamform` with `test --fixture` (0.9 or newer). On macOS (Apple silicon and Intel) and any x86_64 Linux (glibc or musl, Alpine included), `pip install streamform-test` brings it along as the `streamform-bin` package, and the `streamform` command with it. Elsewhere, install the binary yourself. The library looks for it in this order: `STREAMFORM_BIN`, then the binary from `streamform-bin`, then `streamform` on `PATH`. An older binary gets a clear error, not a wrong result.
 
 ## Python
 

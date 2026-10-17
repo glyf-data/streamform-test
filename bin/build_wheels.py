@@ -26,12 +26,14 @@ NAME = "streamform_bin"
 DIST = "streamform-bin"
 
 # Release target -> wheel platform tag. The tags state what the binaries need:
-# macOS 10.12 (x86_64) and 11.0 (arm64), as their LC_BUILD_VERSION says, and
-# glibc 2.39 for the Linux build, the newest GLIBC_ symbol it references.
+# macOS 10.12 (x86_64) and 11.0 (arm64), as their LC_BUILD_VERSION says. Linux
+# uses the static musl build, which needs no libc at all, so one wheel carries
+# both the oldest manylinux tag pip knows and musllinux (Alpine). The gnu build
+# is not packaged: it needs glibc 2.39, which Ubuntu 22.04 and Debian 12 lack.
 PLATFORMS = {
     "aarch64-apple-darwin": "macosx_11_0_arm64",
     "x86_64-apple-darwin": "macosx_10_12_x86_64",
-    "x86_64-unknown-linux-gnu": "manylinux_2_39_x86_64",
+    "x86_64-unknown-linux-musl": "manylinux_2_17_x86_64.manylinux2014_x86_64.musllinux_1_1_x86_64",
 }
 
 INIT = '''"""The `streamform` binary, packaged for pip. See https://pypi.org/project/streamform-bin/."""
@@ -147,7 +149,7 @@ def build(assets: Path, version: str, out: Path, partial: bool = False) -> list[
             "Wheel-Version: 1.0",
             "Generator: streamform-test bin/build_wheels.py",
             "Root-Is-Purelib: false",
-            f"Tag: py3-none-{tag}",
+            *[f"Tag: py3-none-{t}" for t in tag.split(".")],
             "",
         ])
         with zipfile.ZipFile(wheel, "w") as zf:
