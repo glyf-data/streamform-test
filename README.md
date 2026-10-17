@@ -1,61 +1,151 @@
 # streamform-test
 
-**Unit tests for streaming SQL and streaming data quality.** Write the query, feed it events in pytest or `cargo test`, and assert what it emits: every insert, update and delete, the final state per key, the late events it dropped, the bad records it set aside. Tests run in milliseconds on your laptop or in CI, with no Kafka, no Flink and no Docker.
+**Unit tests for streaming SQL.** Give your query some events, then check what it produced. Tests run in pytest or `cargo test`, in milliseconds, on your laptop or in CI. You don't need Kafka, Flink, or Docker.
+
+A streaming query doesn't produce one answer at the end. It keeps updating its answer as events arrive: a running total goes up, a refund brings it down, a late event gets dropped, a bad record has to go somewhere. Those in-between steps are where streaming bugs hide, and they are hard to see on a real cluster. `streamform-test` runs your query in a deterministic engine and lets you check every step.
+
+## Quick start
+
+You need **Python 3.13 or newer** on **macOS** (Apple silicon or Intel) or **x86_64 Linux**.
+
+**1. Install it**
 
 ```bash
-pip install streamform-test
+pip install "streamform-test[pytest]"
 ```
+
+This also installs the engine that runs your queries. There is nothing else to set up.
+
+**2. Write a test.** Save this as `test_orders.py`:
 
 ```python
 from streamform_test import StreamSQL
 
+# The query under test: a running total of order amounts per customer.
 totals = StreamSQL(
     """SELECT customer_id, SUM(amount) AS total
-       FROM source('orders') GROUP BY customer_id""",
+       FROM source('orders')
+       GROUP BY customer_id""",
+    # The input stream: its name and the type of each column.
     sources={"orders": {"customer_id": "int64", "amount": "decimal(12,2)"}},
+    # The result has one row per customer.
     key="customer_id",
 )
 
+
 def test_a_refund_lowers_the_total():
-    run = (totals.event(customer_id=42, amount=100)
-                 .event(customer_id=42, amount=-10)
-                 .run())
+    run = (
+        totals
+        .event(customer_id=42, amount=100)   # an order of 100
+        .event(customer_id=42, amount=-10)   # then a refund of 10
+        .run()
+    )
+    # At the end, customer 42's total is 90.
     run.assert_final_state("customer_id", {"customer_id": 42, "total": 90})
 ```
 
+**3. Run it**
+
 ```text
-$ pytest
-tests/test_totals.py .                                       [100%]
+$ pytest test_orders.py
+test_orders.py .                                             [100%]
 1 passed in 0.05s
 ```
 
-**Documentation: [streamform-test docs](docs/src/introduction.md)**, from first test to every assertion.
+When a check fails, the message shows what the query actually produced:
 
-## Why
+```text
+E   AssertionError: final state has no row {'customer_id': 42, 'total': 100}; it holds:
+E     {'customer_id': 42, 'total': '90'}
+```
 
-A streaming query is not a batch query that runs often. Its result changes as events arrive: a total is inserted, then updated, a row leaves a filter and is deleted, a window closes only when event time passes its end, an order that arrives too late is dropped, a record without a customer must go somewhere. Those behaviours are where streaming bugs live, and they are hard to test against a real cluster: slow, flaky, and silent about what was dropped.
+## See every step, not just the end
 
-`streamform-test` runs the query in a deterministic streaming engine and shows you all of it:
+The final state hides how the query got there. `run.changelog` lists every change the query made, in order:
 
-- **The changelog.** Every insert, update and delete, in order, with the row before each update.
-- **The state.** What a keyed consumer of the result holds after every change.
-- **Event time.** Watermarks, windows that close, and the exact events dropped as late.
-- **Data quality.** Contracts on the input (`not_null`, `check`), and the records each one set aside.
+```python
+for change in run.changelog:
+    print(change)
+```
 
-## What a test can say
+```text
+insert customer_id=42 total=100
+update customer_id=42 total=90
+```
 
-| | |
+A downstream system sees exactly these changes, so you can test them too. For example, you can check that a refund produces an update rather than a second row.
+
+## What you can check
+
+| I want to check that... | Use |
 |---|---|
-| The exact changelog | `.expect({...}, {...}).run().assert_passed()` |
-| These changes, in order, among others | `run.assert_changelog_contains({...}, {...})` |
-| Each key's changes in order, keys interleaved freely | `run.assert_changelog_per_key("customer_id", ...)` |
-| The final state per key | `run.assert_final_state("customer_id", {...})` |
-| The events dropped as late | `run.assert_late({...})` |
-| The records a contract set aside | `run.assert_quarantined({..., "_contract": "positive"})` |
+| each key ends with the right values | `run.assert_final_state("customer_id", {...})` |
+| the query made exactly these changes, in this order | `totals.event(...).expect({...}, {...}).run().assert_passed()` |
+| these changes happened in this order, ignoring any others | `run.assert_changelog_contains({...}, {...})` |
+| each key changed in this order, with keys free to interleave | `run.assert_changelog_per_key("customer_id", ...)` |
+| events that arrived too late were dropped | `run.assert_late({...})` |
+| bad records were set aside instead of counted | `run.assert_quarantined({...})` |
 
-Inputs are built in code: loops, seeded random generators, CSV and JSON Lines files, and streams merged by event time with watermarks added for you. Every `tests/*.yml` fixture in a project also runs as a pytest test of its own.
+Each one has a runnable example in [`examples/`](examples/README.md).
+
+You don't have to type every event by hand. You can generate them in loops or with seeded random generators, read them from CSV or JSON Lines files, and merge several streams by event time ([event streams guide](docs/src/guides/event-streams.md)).
+
+## Catch bad data
+
+Rules on the input, called contracts, set bad records aside before the query sees them. Your test can then check exactly which records were rejected and why:
+
+```python
+totals = StreamSQL(
+    "SELECT customer_id, SUM(amount) AS total FROM source('orders') GROUP BY customer_id",
+    sources={"orders": {
+        "schema": {"customer_id": "int64", "amount": "decimal(12,2)"},
+        "contracts": [
+            {"name": "has_customer", "not_null": ["customer_id"]},  # customer_id must be set
+            {"name": "positive", "check": "amount > 0"},             # amount must be positive
+        ],
+        "quarantine": {"topic": "orders-quarantine"},             # where rejected records go
+    }},
+    key="customer_id",
+)
+
+
+def test_bad_orders_are_set_aside():
+    run = (
+        totals
+        .event(customer_id=42, amount=10)
+        .event(amount=99)                    # no customer
+        .event(customer_id=42, amount=-3)    # not positive
+        .run()
+    )
+    run.assert_quarantined(
+        {"amount": 99, "_contract": "has_customer"},
+        {"customer_id": 42, "amount": -3, "_contract": "positive"},
+    )
+    run.assert_final_state("customer_id", {"customer_id": 42, "total": 10})
+```
+
+Each rejected record carries `_contract`, the name of the first rule it broke, and the total only counts the good order.
+
+See the [data quality guide](docs/src/guides/data-quality.md).
+
+## What SQL works
+
+Supported: one source per query; `SELECT` with columns, aliases, arithmetic and `CAST`; `WHERE`; `GROUP BY` with `SUM`, `COUNT`, `MIN` and `MAX`; `HAVING`; and tumbling windows over event time.
+
+Not supported yet: joins, `DISTINCT`, `UNION`, `LIMIT`, `ORDER BY`, `CASE`, `IN`, `BETWEEN`, `AVG`, and functions such as `UPPER` or `COALESCE`. A query that uses one of these fails straight away with a message naming it, so a test never runs something different from what you wrote. The full list is in the [SQL reference](docs/src/reference/sql.md).
+
+## Learn more
+
+- [Your first test](docs/src/getting-started/first-test.md): the quick start, explained step by step
+- [Checking results](docs/src/guides/assertions.md): every kind of check, and when to use each
+- [Event time and late events](docs/src/concepts/event-time.md): watermarks, windows, and what "late" means
+- [pytest](docs/src/guides/pytest.md): the plugin, and running a project's `tests/*.yml` files as tests
+- [Rust](docs/src/guides/rust.md): the same tests with `cargo test`
+- [All documentation](docs/src/introduction.md)
 
 ## Rust
+
+The same library is available for Rust. It isn't on crates.io yet, so add it from this repository:
 
 ```toml
 [dev-dependencies]
@@ -79,42 +169,22 @@ fn a_refund_lowers_the_total() {
 }
 ```
 
-## Powered by Streamform
+The crate needs the engine on your `PATH`. The simplest way to get it is `pip install streamform`.
 
-The engine underneath is Streamform, which compiles the same SQL to Apache Flink and runs it in production. You do not need to use Streamform to use `streamform-test`: the engine arrives with `pip install` as the `streamform` package (macOS and x86_64 Linux; elsewhere, install the `streamform` binary and put it on `PATH`). If you later run your queries with Streamform, the tests you wrote keep working against your project's models.
+## Questions
 
-The library is a thin, open client: it builds a test, runs it in the engine, and reads the result. It contains no engine code.
+**Do I need Kafka, Flink or Docker?** No. Tests run entirely on your machine.
 
-## In this repository
+**Do I need to use Streamform?** No. The engine underneath is [Streamform](https://pypi.org/project/streamform/), which also compiles the same SQL to Apache Flink for production. You can use `streamform-test` on its own. If you later run your queries with Streamform, the tests you wrote keep working.
 
-| | |
-|---|---|
-| [`docs/`](docs/src/introduction.md) | The documentation, as an mdBook |
-| [`examples/`](examples/) | A runnable test for every kind of assertion, in Python and Rust |
-| [`python/`](python/) | The Python package, Python 3.13 or newer |
-| [`rust/`](rust/) | The Rust crate |
+**What about Windows or Linux on ARM?** The engine isn't packaged for them yet. If you have a `streamform` binary, put it on your `PATH` or set `STREAMFORM_BIN` to its path.
 
-## Developing
+**Is it open source?** This library is, under Apache-2.0. It contains no engine code: it builds the test, hands it to the engine, and reads the result. The engine, the `streamform` package, is free to use, including commercially, under its own terms of use, which come with that package.
 
-```bash
-export STREAMFORM_BIN=/path/to/streamform     # 0.9 or newer, or pip install streamform
-cd python && uv venv -p 3.13 && uv pip install -e '.[pytest]' && .venv/bin/python -m pytest
-cd rust && cargo test && cargo clippy --all-targets -- -D warnings
-cd examples && ../python/.venv/bin/python -m pytest && (cd rust && cargo test)
-mdbook build docs                              # the documentation, into docs/book/
-```
+## Contributing
 
-## Releasing
-
-Set the same version in `python/pyproject.toml`, `python/src/streamform_test/__init__.py` and `rust/Cargo.toml`, then push a `v<version>` tag. The release workflow checks the versions match the tag, builds the package, installs it from scratch (which brings the `streamform` binary from PyPI) and runs the tests, then creates a GitHub release and publishes to PyPI through trusted publishing. Running it by hand with `publish_to_testpypi` is a dry run against TestPyPI.
-
-The `streamform` package itself is published by Streamform's own release, so a new engine needs no release here.
-
-```bash
-git tag v0.1.0 && git push origin v0.1.0
-(cd rust && cargo publish)              # the crate is published by hand
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) to set up the repository, run the tests, and make a release.
 
 ## Licence
 
-Apache-2.0. The `streamform` binary, which the `streamform` package carries, is free to use under its own terms of use, included in that package.
+Apache-2.0.
