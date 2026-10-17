@@ -1,0 +1,1 @@
+//! Examples only; see tests/.

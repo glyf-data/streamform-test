@@ -42,6 +42,105 @@ def test_a_refund_lowers_the_total():
 
 In Rust: `StreamSql::new(sql).source("orders", json!({...})).key(&["customer_id"]).fixture()?`, then the same fixture methods.
 
+## Kinds of test
+
+Each kind below has a full, runnable example in Python and in Rust under [`examples/`](examples/). The snippets use `totals`, a query keyed by customer:
+
+```python
+totals = StreamSQL(
+    "SELECT customer_id, SUM(amount) AS total FROM source('orders') GROUP BY customer_id",
+    sources={"orders": {"customer_id": "int64", "amount": "decimal(12,2)"}},
+    key="customer_id",
+)
+```
+
+### The exact changelog
+
+Every change, in order, compared by the binary with `streamform test`'s typing rules. A failure lists each difference (`rows[1]: total: expected 27, got 28`) and everything the model emitted. [Python](examples/python/test_exact_changelog.py) · [Rust](examples/rust/tests/exact_changelog.rs)
+
+```python
+(totals.event(customer_id=42, amount=10).event(customer_id=42, amount=18)
+       .expect({"op": "insert", "customer_id": 42, "total": 10},
+               {"op": "update", "customer_id": 42, "total": 28})
+       .run().assert_passed())
+```
+
+### Changes in order, among others
+
+The changes a test is about, in this order, with anything else around them. [Python](examples/python/test_contains.py) · [Rust](examples/rust/tests/contains.rs)
+
+```python
+run.assert_changelog_contains({"op": "insert", "customer_id": 7, "total": 60},
+                              {"op": "update", "customer_id": 7, "total": 110})
+```
+
+### Each key's changes in order
+
+What a topic keyed by the key guarantees: each key's changes in order, any order between keys. [Python](examples/python/test_per_key.py) · [Rust](examples/rust/tests/per_key.rs)
+
+```python
+run.assert_changelog_per_key("customer_id",
+    {"op": "insert", "customer_id": 2, "total": 7},
+    {"op": "insert", "customer_id": 1, "total": 5},
+    {"op": "update", "customer_id": 1, "total": 10})
+```
+
+### The final state per key
+
+The table a keyed consumer holds after every change: each key's last row, keys whose last change is a delete removed, rows in any order. [Python](examples/python/test_final_state.py) · [Rust](examples/rust/tests/final_state.rs)
+
+```python
+run.assert_final_state("customer_id", {"customer_id": 7, "total": 120})
+run.final_state("customer_id")          # {(7,): {"customer_id": 7, "total": "120"}}
+```
+
+### Late events and windows
+
+A window emits a row per key when the watermark passes its end; an event behind the watermark is dropped and listed. [Python](examples/python/test_late_events.py) · [Rust](examples/rust/tests/late_events.rs)
+
+```python
+run = (spend_per_5m.event(customer_id=42, amount=60, ordered_at="2026-08-30T10:01:00Z")
+                   .watermark("2026-08-30T10:05:00Z")
+                   .event(customer_id=42, amount=5, ordered_at="2026-08-30T10:03:00Z")
+                   .run())
+run.assert_late({"customer_id": 42, "amount": 5, "ordered_at": "2026-08-30T10:03:00Z"})
+```
+
+`expect_late(...)` before `run()` has the binary compare them instead.
+
+### Contracts and quarantined events
+
+A record that breaks a source's contract never reaches the model; it is quarantined with `_contract`, the first rule it broke. [Python](examples/python/test_contracts.py) · [Rust](examples/rust/tests/contracts.rs)
+
+```python
+run.assert_quarantined({"amount": 99, "_contract": "has_customer"},
+                       {"customer_id": 42, "amount": -3, "_contract": "positive"})
+```
+
+`expect_quarantined(...)` before `run()` has the binary compare them instead.
+
+### A project's models and its YAML fixtures
+
+Tests in code against a project's own models, beside its `tests/*.yml`, in one pytest run. [Python](examples/python/test_project.py) · [Rust](examples/rust/tests/project.rs)
+
+```ini
+# pytest.ini
+[pytest]
+streamform_project = shop
+```
+
+```python
+def test_a_customer_total(streamform_project):
+    run = streamform_project.fixture("customer_metrics").event(customer_id=42, amount=10).run()
+    run.assert_final_state("customer_id", {"customer_id": 42, "total_spend": 10})
+```
+
+The plugin collects every `shop/tests/*.yml` as a test of its own. `Fixture.write(path)` saves a fixture built in code as a file, to keep it under `tests/`. In Rust, `assert_project_passes("shop")` runs every fixture in one `#[test]`.
+
+### Event streams
+
+Loops, seeded generators, CSV and JSON Lines files, and merging streams by event time with watermarks; see [Building event streams](#building-event-streams). [Python](examples/python/test_event_streams.py) · [Rust](examples/rust/tests/event_streams.rs)
+
 ## Building event streams
 
 `streamform_test.events` builds the events a test feeds, so a test can loop, generate, read a file, or merge streams instead of listing every event:
@@ -131,6 +230,7 @@ fn totals_per_customer() {
 export STREAMFORM_BIN=/path/to/streamform     # 0.9 or newer
 cd python && uv venv -p 3.13 && uv pip install -e '.[pytest]' && .venv/bin/python -m pytest
 cd rust && cargo test && cargo clippy --all-targets -- -D warnings
+cd examples && ../python/.venv/bin/python -m pytest && (cd rust && cargo test)
 ```
 
 `testdata/projects/` holds two example projects, copied from Streamform's examples.

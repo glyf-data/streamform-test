@@ -1,0 +1,9 @@
+sources:
+  orders:
+    connector: kafka
+    topic: orders
+    format: json
+    key: [customer_id]            # producers key each order by customer
+    schema:
+      customer_id: int64
+      amount: decimal

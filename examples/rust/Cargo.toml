@@ -1,0 +1,10 @@
+[package]
+name = "streamform-test-examples"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Examples only: each file in tests/ is one kind of test.
+[dev-dependencies]
+streamform-test = { path = "../../rust" }
+serde_json = "1"
