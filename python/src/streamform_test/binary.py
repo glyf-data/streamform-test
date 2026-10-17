@@ -23,14 +23,27 @@ class StreamformError(Exception):
 
 
 def find_binary() -> str:
-    """The path of the `streamform` binary to run."""
+    """The path of the `streamform` binary to run.
+
+    `STREAMFORM_BIN` when set; else the binary `streamform-bin` installed
+    beside this package; else `streamform` on PATH.
+    """
     configured = os.environ.get(BINARY_ENV)
     if configured:
         return configured
+    try:
+        import streamform_bin
+    except ImportError:
+        pass
+    else:
+        bundled = streamform_bin.binary()
+        if bundled.is_file():
+            return str(bundled)
     found = shutil.which("streamform")
     if found is None:
         raise StreamformError(
-            f"streamform is not on PATH; install it, or set {BINARY_ENV} to the binary's path"
+            "no streamform binary: `pip install streamform-bin`, put streamform on PATH, "
+            f"or set {BINARY_ENV} to the binary's path"
         )
     return found
 

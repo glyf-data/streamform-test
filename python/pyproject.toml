@@ -10,7 +10,12 @@ readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.13"
-dependencies = []
+# The binary comes along where a streamform-bin wheel exists; elsewhere,
+# install streamform yourself and put it on PATH or in STREAMFORM_BIN.
+dependencies = [
+  "streamform-bin>=0.9; sys_platform == 'darwin' and (platform_machine == 'arm64' or platform_machine == 'x86_64')",
+  "streamform-bin>=0.9; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
 classifiers = [
   "Framework :: Pytest",
   "Programming Language :: Python :: 3 :: Only",

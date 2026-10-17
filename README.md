@@ -179,14 +179,14 @@ Two kinds of assertion:
 
 ## Requirements
 
-A `streamform` with `test --fixture` (0.9 or newer), on `PATH` or named by `STREAMFORM_BIN`. An older binary gets a clear error, not a wrong result.
+A `streamform` with `test --fixture` (0.9 or newer). On macOS (Apple silicon and Intel) and Linux x86_64, `pip install streamform-test` brings it along as the `streamform-bin` package, and the `streamform` command with it. Elsewhere, install the binary yourself. The library looks for it in this order: `STREAMFORM_BIN`, then the binary from `streamform-bin`, then `streamform` on `PATH`. An older binary gets a clear error, not a wrong result.
 
 ## Python
 
 Python 3.13 or newer.
 
 ```bash
-pip install streamform-test            # not yet on PyPI: pip install ./python
+pip install streamform-test            # brings the streamform binary on macOS and Linux x86_64
 ```
 
 - `Project(path).fixture(model)` starts a fixture; `.event(**columns)`, `.events(rows)`, `.watermark(at)`, `.expect(*changes)`, `.expect_late(*rows)`, `.expect_quarantined(*rows)`, then `.run()`.
@@ -234,6 +234,21 @@ cd examples && ../python/.venv/bin/python -m pytest && (cd rust && cargo test)
 ```
 
 `testdata/projects/` holds two example projects, copied from Streamform's examples.
+
+## Releasing
+
+`streamform-bin` is built from a Streamform release's assets, never from source: `bin/build_wheels.py` checks each archive against the release's `checksums.txt` and writes one wheel per platform with the binary and the terms of use.
+
+```bash
+gh release download v0.9.0 -R glyf-data/streamform -p 'streamform-*-*.tar.gz' -p checksums.txt -p LICENSE -D assets/
+python bin/build_wheels.py --assets assets/ --version 0.9.0 --out dist/
+(cd python && uv build --out-dir ../dist)
+uvx twine check dist/*
+uv publish dist/*                       # needs a PyPI token
+(cd rust && cargo publish)              # needs a crates.io token
+```
+
+Publish `streamform-bin` before `streamform-test`, since the second depends on the first.
 
 ## Licence
 
