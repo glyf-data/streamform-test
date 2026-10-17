@@ -1,0 +1,188 @@
+name: release
+
+# streamform-test: a `v<version>` tag publishes the Python package to PyPI and
+# a GitHub release. The binary it depends on, streamform-bin, is released by
+# release-bin.yml and must be on PyPI first: the smoke test installs it from there.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      publish_to_testpypi:
+        description: "Publish the built artifacts to TestPyPI (dry run of the PyPI release)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  check-version:
+    name: check tag matches package version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Compare versions
+        shell: bash
+        run: |
+          py=$(sed -n 's/^version = "\(.*\)"/\1/p' python/pyproject.toml | head -1)
+          rs=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)
+          init=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' python/src/streamform_test/__init__.py)
+          echo "pyproject=$py cargo=$rs __init__=$init ref=$GITHUB_REF_NAME"
+          [ "$py" = "$rs" ] && [ "$py" = "$init" ] || { echo "::error::version mismatch between python/pyproject.toml, rust/Cargo.toml and python/src/streamform_test/__init__.py"; exit 1; }
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            [ "$GITHUB_REF_NAME" = "v$py" ] || { echo "::error::tag $GITHUB_REF_NAME does not match package version $py"; exit 1; }
+          fi
+
+  build:
+    name: build wheel and sdist
+    needs: check-version
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Build distributions
+        run: pipx run build --outdir dist python
+
+      - name: Check distributions
+        run: pipx run twine check --strict dist/*
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error
+
+  # Installs the wheel the way a user would, so streamform-bin comes from PyPI,
+  # and runs the SDK's tests against it.
+  smoke:
+    name: smoke test (${{ matrix.os }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Install the wheel and run the SDK tests
+        shell: bash
+        run: |
+          python -m venv smoke
+          smoke/bin/python -m pip install --quiet dist/*.whl pytest
+          smoke/bin/streamform --version
+          smoke/bin/python -m pytest -q python/tests
+
+  publish-release:
+    name: publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Generate checksums
+        working-directory: dist
+        run: |
+          sha256sum *.whl *.tar.gz > checksums.txt
+          cat checksums.txt
+
+      - name: Create or update GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/checksums.txt
+
+  # Dry run: `workflow_dispatch` with publish_to_testpypi=true. Uses trusted
+  # publishing (OIDC), no API token secrets. Re-running with an already
+  # uploaded version is a no-op because of skip-existing.
+  publish-testpypi:
+    name: publish to TestPyPI
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_to_testpypi
+    needs: smoke
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/streamform-test
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/
+          skip-existing: true
+          print-hash: true
+
+  # Real release: runs only on `v*` tags, after the GitHub Release exists, and
+  # uploads exactly the same files. PyPI uploads are immutable, so this is the
+  # last job on purpose.
+  publish-pypi:
+    name: publish to PyPI
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: publish-release
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/streamform-test
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          print-hash: true

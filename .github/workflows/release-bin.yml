@@ -1,0 +1,195 @@
+name: release-bin
+
+# streamform-bin: the streamform binary, packaged for pip. A `bin-v<version>`
+# tag packages the Streamform release `v<version>` and publishes the wheels.
+# The archives come from the Streamform release, checked against its
+# checksums.txt by bin/build_wheels.py; nothing here compiles the binary.
+on:
+  push:
+    tags:
+      - "bin-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Streamform release to package, without the v (e.g. 0.9.0)"
+        required: true
+        type: string
+      publish_to_testpypi:
+        description: "Publish the built wheels to TestPyPI (dry run of the PyPI release)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  build:
+    name: build wheels
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then v="${GITHUB_REF_NAME#bin-v}"; else v="$INPUT_VERSION"; fi
+          [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'$v' is not a release version like 0.9.0"; exit 1; }
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      # The Streamform releases are private, so reading them needs a token with
+      # read access to glyf-data/streamform (contents: read, nothing else).
+      - name: Download the Streamform release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.STREAMFORM_RELEASES_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          [ -n "$GH_TOKEN" ] || { echo "::error::the STREAMFORM_RELEASES_TOKEN secret is not set"; exit 1; }
+          gh release download "v$VERSION" -R glyf-data/streamform -D assets \
+            -p checksums.txt -p LICENSE -p 'streamform-*-apple-darwin.tar.gz' -p 'streamform-x86_64-unknown-linux-musl.tar.gz'
+          ls -l assets
+
+      - name: Build wheels
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: python bin/build_wheels.py --assets assets --version "$VERSION" --out dist
+
+      - name: Check distributions
+        run: pipx run twine check --strict dist/*
+
+      - name: Upload wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-bin
+          path: dist/*.whl
+          if-no-files-found: error
+
+  # Each wheel is installed where it claims to run and drives the SDK's tests,
+  # so a wheel that installs but cannot run a fixture never reaches PyPI.
+  smoke:
+    name: smoke test (${{ matrix.name }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux x86_64
+            os: ubuntu-latest
+          - name: macos arm64
+            os: macos-15
+          - name: macos x86_64
+            os: macos-15-intel
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-bin
+          path: dist
+
+      - name: Install the wheel and run the SDK tests
+        shell: bash
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          python -m venv smoke
+          smoke/bin/python -m pip install --quiet --no-index --find-links dist "streamform-bin==$VERSION"
+          [ "$(smoke/bin/streamform --version)" = "streamform $VERSION" ]
+          smoke/bin/python -m pip install --quiet --no-deps ./python
+          smoke/bin/python -m pip install --quiet pytest
+          smoke/bin/python -m pytest -q python/tests
+
+      # The Linux wheel carries the static musl build: check it on an older
+      # glibc and on Alpine, the two places its platform tags promise.
+      - name: Install the wheel on Debian 12 and Alpine
+        if: runner.os == 'Linux'
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          for image in python:3.13-slim-bookworm python:3.13-alpine; do
+            docker run --rm -v "$PWD/dist:/dist:ro" -e VERSION "$image" sh -ec '
+              pip install --quiet --root-user-action=ignore --no-index --find-links /dist "streamform-bin==$VERSION"
+              [ "$(streamform --version)" = "streamform $VERSION" ]'
+            echo "$image ok"
+          done
+
+  # Dry run: `workflow_dispatch` with publish_to_testpypi=true. Uses trusted
+  # publishing (OIDC), no API token secrets. Re-running with an already
+  # uploaded version is a no-op because of skip-existing.
+  publish-testpypi:
+    name: publish to TestPyPI
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_to_testpypi
+    needs: smoke
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/streamform-bin
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-bin
+          path: dist
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/
+          skip-existing: true
+          print-hash: true
+
+  # Real release: runs only on `bin-v*` tags, after every wheel passed its
+  # smoke test. PyPI uploads are immutable, so this is the last job on purpose.
+  publish-pypi:
+    name: publish to PyPI
+    if: startsWith(github.ref, 'refs/tags/bin-v')
+    needs: smoke
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/streamform-bin
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-bin
+          path: dist
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          print-hash: true
