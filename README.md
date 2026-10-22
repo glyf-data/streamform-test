@@ -130,9 +130,15 @@ See the [data quality guide](docs/src/guides/data-quality.md).
 
 ## What SQL works
 
-Supported: one source per query; `SELECT` with columns, aliases, arithmetic and `CAST`; `WHERE`; `GROUP BY` with `SUM`, `COUNT`, `MIN` and `MAX`; `HAVING`; and tumbling windows over event time.
+Supported:
 
-Not supported yet: joins, `DISTINCT`, `UNION`, `LIMIT`, `ORDER BY`, `CASE`, `IN`, `BETWEEN`, `AVG`, and functions such as `UPPER` or `COALESCE`. A query that uses one of these fails straight away with a message naming it, so a test never runs something different from what you wrote. The full list is in the [SQL reference](docs/src/reference/sql.md).
+- one source per query, with `SELECT`, aliases, arithmetic and `CAST`
+- `WHERE` with comparisons, `AND`/`OR`/`NOT`, `IS NULL`, `BETWEEN`, `IN (...)` and `LIKE`
+- `CASE`, `||`, and the functions `COALESCE`, `NULLIF`, `UPPER`, `LOWER`, `TRIM`, `LTRIM`, `RTRIM`, `CHAR_LENGTH` and `ABS`
+- `GROUP BY` columns or expressions, with `SUM`, `COUNT`, `COUNT(DISTINCT x)`, `MIN`, `MAX` and `AVG`, and `HAVING`
+- tumbling windows over event time
+
+Not supported yet: joins from `StreamSQL` (a Streamform project can join two sources), `DISTINCT`, `UNION`, `LIMIT`, `ORDER BY`, date functions, and window functions with `OVER`. A query that uses one of these fails straight away with a message naming it, so a test never runs something different from what you wrote. The full list is in the [SQL reference](docs/src/reference/sql.md).
 
 ## Learn more
 

@@ -7,9 +7,10 @@ The engine runs a focused, streaming subset of SQL. Anything outside it is refus
 | | |
 |---|---|
 | Reading | `FROM source('name')`; one source per query |
-| Projection | Columns, aliases (`AS`), `SELECT *`, arithmetic (`+ - * /`), `CAST` |
-| Filtering | `WHERE` with `= <> < <= > >=`, `AND`, `OR`, `NOT`, `IS NULL`, `IS NOT NULL` |
-| Aggregation | `GROUP BY` columns with `SUM`, `COUNT`, `COUNT(*)`, `MIN`, `MAX` |
+| Projection | Columns, aliases (`AS`), `SELECT *`, arithmetic (`+ - * /`), `CAST`, `CASE`, `\|\|` |
+| Functions | `COALESCE`, `NULLIF`, `UPPER`, `LOWER`, `TRIM`, `LTRIM`, `RTRIM`, `CHAR_LENGTH` (also `LENGTH`), `ABS`, each with Apache Flink's meaning: `CONCAT` and `\|\|` are NULL when any argument is, `TRIM` removes spaces only |
+| Filtering | `WHERE` with `= <> < <= > >=`, `AND`, `OR`, `NOT`, `IS NULL`, `IS NOT NULL`, `[NOT] BETWEEN`, `[NOT] IN (...)`, `[NOT] LIKE 'pattern'` |
+| Aggregation | `GROUP BY` columns or expressions (or a `SELECT` alias) with `SUM`, `COUNT`, `COUNT(*)`, `COUNT(DISTINCT x)`, `MIN`, `MAX`, `AVG`. `AVG` has Flink's type: an integer average is an integer, truncated toward zero; a decimal one keeps at least six decimal places |
 | After aggregation | `HAVING`, a filter over the aggregate, which deletes a row when it stops matching |
 | Windows | Tumbling windows of event time, with `window="5m"`, grouping by `window_start` and `window_end` |
 | Literals | Integers, decimals, strings, booleans, `NULL` |
@@ -18,10 +19,10 @@ The engine runs a focused, streaming subset of SQL. Anything outside it is refus
 
 | | |
 |---|---|
-| Joins | `JOIN` of any kind |
+| Joins | From `StreamSQL`, which delivers every event to one source. A Streamform project can join two inputs with an inner `JOIN ... ON` and test it with fixtures that name each event's source |
 | Set and row operations | `UNION`, `DISTINCT`, `LIMIT`, `ORDER BY` |
-| Expressions | `CASE`, `IN`, `BETWEEN`, scalar functions (`UPPER`, `COALESCE`, date functions) |
-| Aggregates | `AVG` (compute `SUM(x)` and `COUNT(*)` instead), `DISTINCT` or `FILTER` inside an aggregate |
+| Expressions | `ILIKE`, `LIKE ... ESCAPE`, `SUBSTRING`, `ROUND`, date functions |
+| Aggregates | `DISTINCT` inside an aggregate other than `COUNT`, `FILTER` inside an aggregate |
 | Analytic windows | `OVER (...)` window functions; sliding and session windows |
 
 Each query reads one source. In a Streamform project, a model can also read another model with `ref('name')`, which is how multi-step pipelines are built and tested.
